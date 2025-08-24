@@ -1,83 +1,56 @@
-
 export default async function handler(req, res) {
-  // ✅ Allow CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Only GET allowed" });
   }
 
   try {
-    // ✅ Collect data from query OR body
-    const body =
-      req.method === "GET"
-        ? req.query
-        : typeof req.body === "string"
-        ? JSON.parse(req.body)
-        : req.body;
+    const { review } = req.query;
 
-    const {
-      reason = "Not provided",
-      impressions = "Not provided",
-      comfort = "Not provided",
-      improvements = "Not provided",
-      durability = "Not provided",
-      favorite = "Not provided",
-      recommendation = "Not provided",
-      final = "Not provided",
-    } = body;
+    if (!review) {
+      return res.status(400).json({ error: "Missing ?review= in query" });
+    }
 
-    // ✅ Call OpenAI
+    // Call OpenAI API securely
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.API_KEY}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          {
-            role: "system",
-            content:
-              "You are a customer writing a product review. Keep it natural, like a real customer, about a pillow.",
-          },
+          { role: "system", content: "You are a helpful assistant that improves customer reviews." },
           {
             role: "user",
-            content: `Customer shared:
-- Why they bought it: ${reason}
-- First impression: ${impressions}
-- Comfort: ${comfort}
-- Improvements: ${improvements}
-- Durability: ${durability}
-- Favorite feature: ${favorite}
-- Recommendation: ${recommendation}
-- Final thoughts: ${final}
-
-Write a review using these points organically.`,
+            content: `Please summarize the following review and then provide an improved, natural version:\n\n"${review}"`,
           },
         ],
-        max_tokens: 250,
-        temperature: 0.9,
+        max_tokens: 200,
+        temperature: 0.7,
       }),
     });
 
     const data = await response.json();
 
-    if (data?.choices?.[0]?.message?.content) {
-      return res.status(200).json({
-        review: data.choices[0].message.content.trim(),
-      });
-    } else {
-      return res.status(500).json({
-        error: "No review generated",
-        raw: data,
-      });
+    if (!data.choices || !data.choices.length) {
+      return res.status(500).json({ error: "Invalid OpenAI response" });
     }
-  } catch (err) {
-    console.error("❌ API Error:", err);
-    return res.status(500).json({ error: "Server error", details: err.message });
+
+    const content = data.choices[0].message.content;
+    const lines = content.split("\n").map(line => line.trim()).filter(line => line);
+
+    const summary = lines[0] || "No summary generated.";
+    const improvedReview = lines.length > 1 ? lines.slice(1).join(" ") : "No improved review generated.";
+
+    res.status(200).json({
+      review,
+      summary,
+      improvedReview,
+    });
+
+  } catch (error) {
+    console.error("Error in API route:", error);
+    res.status(500).json({ error: "Something went wrong" });
   }
 }
