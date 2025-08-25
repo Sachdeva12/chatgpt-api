@@ -25,7 +25,7 @@ export default async function handler(req, res) {
           {
             role: "system",
             content:
-              "You are a helpful assistant that summarizes and improves customer reviews. Always return:\n1. A short summary (one sentence).\n2. An improved, natural-sounding review.",
+              "You are a helpful assistant that summarizes and improves customer reviews. Always return:\n1. A short summary (one sentence).\n2. An improved, natural-sounding review. Do not add anything like **Improved Review:** and **Summary:** just direct text so it will use directly",
           },
           {
             role: "user",
