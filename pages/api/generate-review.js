@@ -1,6 +1,8 @@
+// pages/api/generate-review.js
+
 export default async function handler(req, res) {
   if (req.method !== "GET") {
-    return res.status(405).json({ error: "Only GET allowed" });
+    return res.status(405).json({ error: "Only GET requests are allowed" });
   }
 
   try {
@@ -10,12 +12,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing ?review= in query" });
     }
 
-    // Call OpenAI API securely
+    // 🔐 Call OpenAI securely (make sure API_KEY is set in Vercel environment variables)
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_KEY}`, // Make sure API_KEY is set in Vercel env
+        Authorization: `Bearer ${process.env.API_KEY}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
@@ -23,11 +25,11 @@ export default async function handler(req, res) {
           {
             role: "system",
             content:
-              "You are a helpful assistant that summarizes and improves customer reviews. Always provide:\n1. A short summary (first line)\n2. An improved, natural-sounding review (rest of text).",
+              "You are a helpful assistant that summarizes and improves customer reviews. Always return:\n1. A short summary (one sentence).\n2. An improved, natural-sounding review.",
           },
           {
             role: "user",
-            content: `Please summarize the following review and then provide an improved version:\n\n"${review}"`,
+            content: `Summarize and improve this review:\n\n"${review}"`,
           },
         ],
         max_tokens: 250,
@@ -36,37 +38,36 @@ export default async function handler(req, res) {
     });
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("OpenAI API Error:", errText);
-      return res.status(500).json({ error: "Failed to fetch from OpenAI API" });
+      const errorText = await response.text();
+      console.error("OpenAI API Error:", errorText);
+      return res
+        .status(response.status)
+        .json({ error: "Failed to fetch from OpenAI API", details: errorText });
     }
 
     const data = await response.json();
 
-    if (!data?.choices?.length || !data.choices[0]?.message?.content) {
+    // Validate response structure
+    const content = data?.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      console.error("Invalid OpenAI response:", data);
       return res.status(500).json({ error: "Invalid OpenAI response" });
     }
 
-    const content = data.choices[0].message.content;
-    const lines = content
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line);
+    // Split into summary + improved review
+    const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
 
-    // First line = summary, rest = improved review
     const summary = lines[0] || "No summary generated.";
     const improvedReview =
-      lines.length > 1
-        ? lines.slice(1).join(" ")
-        : "No improved review generated.";
+      lines.length > 1 ? lines.slice(1).join(" ") : "No improved review generated.";
 
     return res.status(200).json({
-      review,
+      original: review,
       summary,
       improvedReview,
     });
   } catch (error) {
     console.error("Error in API route:", error);
-    return res.status(500).json({ error: "Something went wrong" });
+    return res.status(500).json({ error: "Something went wrong", details: error.message });
   }
 }
