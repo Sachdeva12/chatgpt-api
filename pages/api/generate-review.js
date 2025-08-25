@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   try {
     const { review } = req.query;
 
-    if (!review) {
+    if (!review || review.trim() === "") {
       return res.status(400).json({ error: "Missing ?review= in query" });
     }
 
@@ -15,42 +15,58 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.API_KEY}`,
+        Authorization: `Bearer ${process.env.API_KEY}`, // Make sure API_KEY is set in Vercel env
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "You are a helpful assistant that improves customer reviews." },
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant that summarizes and improves customer reviews. Always provide:\n1. A short summary (first line)\n2. An improved, natural-sounding review (rest of text).",
+          },
           {
             role: "user",
-            content: `Please summarize the following review and then provide an improved, natural version:\n\n"${review}"`,
+            content: `Please summarize the following review and then provide an improved version:\n\n"${review}"`,
           },
         ],
-        max_tokens: 200,
+        max_tokens: 250,
         temperature: 0.7,
       }),
     });
 
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("OpenAI API Error:", errText);
+      return res.status(500).json({ error: "Failed to fetch from OpenAI API" });
+    }
+
     const data = await response.json();
 
-    if (!data.choices || !data.choices.length) {
+    if (!data?.choices?.length || !data.choices[0]?.message?.content) {
       return res.status(500).json({ error: "Invalid OpenAI response" });
     }
 
     const content = data.choices[0].message.content;
-    const lines = content.split("\n").map(line => line.trim()).filter(line => line);
+    const lines = content
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line);
 
+    // First line = summary, rest = improved review
     const summary = lines[0] || "No summary generated.";
-    const improvedReview = lines.length > 1 ? lines.slice(1).join(" ") : "No improved review generated.";
+    const improvedReview =
+      lines.length > 1
+        ? lines.slice(1).join(" ")
+        : "No improved review generated.";
 
-    res.status(200).json({
+    return res.status(200).json({
       review,
       summary,
       improvedReview,
     });
-
   } catch (error) {
     console.error("Error in API route:", error);
-    res.status(500).json({ error: "Something went wrong" });
+    return res.status(500).json({ error: "Something went wrong" });
   }
 }
