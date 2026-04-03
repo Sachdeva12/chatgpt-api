@@ -10,28 +10,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const {
-      reason,
-      impressions,
-      comfort,
-      improvements,
-      durability,
-      favorite,
-      recommendation,
-      final,
-    } = req.body;
+    const { responses } = req.body;
+
+    if (!responses || Object.keys(responses).length === 0) {
+      return res.status(400).json({ error: "No responses provided" });
+    }
+
+    // ✅ Convert dynamic responses into readable prompt
+    let promptInputs = "";
+
+    for (const key in responses) {
+      promptInputs += `${key}: ${responses[key]}\n`;
+    }
 
     const prompt = `
 Write a natural, human-like product review using the following inputs:
 
-Reason for purchase: ${reason}
-First impressions: ${impressions}
-Comfort & support: ${comfort}
-Improvements: ${improvements}
-Durability: ${durability}
-Favorite feature: ${favorite}
-Recommendation: ${recommendation}
-Final thoughts: ${final}
+${promptInputs}
 
 Make it sound genuine, conversational, and not robotic.
 `;
